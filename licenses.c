@@ -13,7 +13,7 @@
 void print_usage(char *program_name)
 {
     printf("%s <LICENSE>\n", program_name);
-    printf("Currently the current licenses are available:\n");
+    printf("Currently these licenses are available:\n");
     printf("  - MIT [%s]\n", LICENSE_MIT);
     printf("  - UNLICENSE [%s]\n", LICENSE_UN);
 }
@@ -95,7 +95,11 @@ int main(int argc, char **argv)
         return 1;
     }
     char *license_input = str_to_lower(shift_args(&argc, &argv));
-    if (strcmp(license_input, LICENSE_MIT) == 0){
+    if (strcmp(license_input, "-h") == 0){
+        print_usage(program_name);
+        return 0;
+    }
+    else if (strcmp(license_input, LICENSE_MIT) == 0){
         return write_license(LICENSE_MIT_PATH);
     }
     else if (strcmp(license_input, LICENSE_UN) == 0){
