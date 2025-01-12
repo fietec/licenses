@@ -10,9 +10,11 @@
 #define LICENSE_MIT_PATH ""
 #define LICENSE_UN_PATH ""
 
+#define return_defer(value) do{result = (value); goto defer;}while(0);
+
 void print_usage(char *program_name)
 {
-    printf("%s <LICENSE>\n", program_name);
+    printf("%s <license>\n", program_name);
     printf("Currently these licenses are available:\n");
     printf("  - MIT [%s]\n", LICENSE_MIT);
     printf("  - UNLICENSE [%s]\n", LICENSE_UN);
@@ -67,23 +69,28 @@ char* read_entire_file(char *file_path)
 
 int write_license(char *filepath)
 {
+    int result = 0;
     char *content = read_entire_file(filepath);
     if (!content){
         fprintf(stderr, "[ERROR] Could not read src file %s!\n", filepath);
         return 1;
     }
     FILE *file = fopen("LICENSE", "w");
+    if (!file){
+        fprintf(stderr, "[ERROR] Could not open `LICENSE` file!\n");
+        return_defer(1);
+    }
     size_t len = strlen(content);
     size_t n = fwrite(content, sizeof(char), len, file);
     if (n < len){
         fprintf(stderr, "[ERROR] Could only write %d of %d bytes to %s!\n", n, len, "LICENSE");
-        free(content);
-        return 1;
+        return_defer(1);
     }
-    fclose(file);
-    free(content);
     printf("Successfully create LICENSE!\n");
-    return 0;
+  defer:
+    free(content);
+    fclose(file);
+    return result;
 }
 
 int main(int argc, char **argv)
