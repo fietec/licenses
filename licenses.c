@@ -3,21 +3,67 @@
 #include <string.h>
 #include <stdlib.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
-#define LICENSE_MIT "mit"
-#define LICENSE_UN "un"
+#define CONP_IMPLEMENTATION
+#include "conp.h"
 
-#define LICENSE_MIT_PATH ""
-#define LICENSE_UN_PATH ""
+#define return_defer(value) do{result = (value); goto defer;}while(0)
+    
+#define CONFIG_FILE_NAME "licenses.config"
 
-#define return_defer(value) do{result = (value); goto defer;}while(0);
+static char temp_buffer[FILENAME_MAX];
+
+static ConpEntries config;
+
+char *get_config_file_path()
+{
+    snprintf(temp_buffer, FILENAME_MAX, "%s/licenses/"CONFIG_FILE_NAME, getenv("APPDATA"));
+    return temp_buffer;
+}
+
+char *get_config_path()
+{
+    snprintf(temp_buffer, FILENAME_MAX, "%s/licenses", getenv("APPDATA"));
+    return temp_buffer;
+}
+
+bool isdir(const char *path)
+{
+    struct stat attr;
+    if (stat(path, &attr) == -1) return false;
+    return S_ISDIR(attr.st_mode);
+}
+
+bool isfile(const char *path)
+{
+    struct stat attr;
+    if (stat(path, &attr) == -1) return false;
+    return S_ISREG(attr.st_mode);
+}
+
+bool create_dir(const char *path)
+{
+    if (mkdir(path) == -1){
+        fprintf(stderr, "Could not create directory '%s': %s!\n", path, strerror(errno));
+        return false;
+    }
+    return true;
+}
 
 void print_usage(char *program_name)
 {
-    printf("%s <license>\n", program_name);
-    printf("Currently these licenses are available:\n");
-    printf("  - MIT [%s]\n", LICENSE_MIT);
-    printf("  - UNLICENSE [%s]\n", LICENSE_UN);
+    printf("Licenses - How to use:\n");
+    printf("  %s <license>\n", program_name);
+    if (config.count == 0){
+        printf("  There are no licenses available.\n");
+        return;
+    }
+    printf("  Currently these licenses are available:\n");
+    for (size_t i=0; i<config.count; ++i){
+        ConpToken key = config.items[i].key;
+        printf("    - %.*s\n", key.len, key.start);
+    }
 }
 
 char* shift_args(int *argc, char ***argv)
@@ -72,7 +118,7 @@ int write_license(char *filepath)
     int result = 0;
     char *content = read_entire_file(filepath);
     if (!content){
-        fprintf(stderr, "[ERROR] Could not read src file %s!\n", filepath);
+        fprintf(stderr, "[ERROR] Could not read src file '%s'!\n", filepath);
         return 1;
     }
     FILE *file = fopen("LICENSE", "w");
@@ -95,26 +141,55 @@ int write_license(char *filepath)
 
 int main(int argc, char **argv)
 {
+    int result;
+    // create config files
+    char *config_path = get_config_path();
+    if (!isdir(config_path)){
+        if (!create_dir(config_path)) return 1;
+    }
+    config_path = get_config_file_path();
+    if (!isfile(config_path)){
+        FILE *f = fopen(config_path, "w");
+        fclose(f);
+        printf("Created config file at '%s'.\n", config_path);
+    }
+    
+    char *config_content = read_entire_file(config_path);
+    if (config_content == NULL){
+        fprintf(stderr, "Failed to read config file!\n");
+        return 1;
+    }
+
+    if (!conp_parse_all(&config, config_content, strlen(config_content), CONFIG_FILE_NAME)){
+        fprintf(stderr, "Failed to parse config!\n");
+        return_defer(1);
+    }
     char *program_name = shift_args(&argc, &argv);
     if (argc < 1){
         fprintf(stderr, "[ERROR] No license provided!\n");
         print_usage(program_name);
-        return 1;
+        return_defer(1);
     }
     char *license_input = str_to_lower(shift_args(&argc, &argv));
     if (strcmp(license_input, "-h") == 0){
         print_usage(program_name);
-        return 0;
+        return_defer(0);
     }
-    else if (strcmp(license_input, LICENSE_MIT) == 0){
-        return write_license(LICENSE_MIT_PATH);
-    }
-    else if (strcmp(license_input, LICENSE_UN) == 0){
-        return write_license(LICENSE_UN_PATH);
+    else if (conp_entries_iskey(&config, license_input)){
+        ConpToken token;
+        if (!conp_entries_get(&config, license_input, &token)){
+            fprintf(stderr, "Config changed during runtime!\n");
+            return_defer(1);
+        }
+        if (!conp_extract(&token, temp_buffer, FILENAME_MAX)) return_defer(1);
+        return write_license(temp_buffer);
     }
     else{
         fprintf(stderr, "[ERROR] Unknown license: \"%s\"!\n", license_input);
         print_usage(program_name);
-        return 1;
+        return_defer(1);
     }
+  defer:
+    free(config_content);
+    return result;
 }

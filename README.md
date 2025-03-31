@@ -1,3 +1,13 @@
 # licenses
 A very simple LICENSE file maker tool.
-Define the paths to the LICENSE samples in the source code.
+
+## How to use
+To create a `LICENSE` file, simply run 
+``` terminal
+licenses <license>
+```
+
+To add licenses, simply add an entry to the automatically generated `licenses.config` file.
+```
+mit = "<path to the template license file>"
+```
