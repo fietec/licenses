@@ -191,5 +191,6 @@ int main(int argc, char **argv)
     }
   defer:
     free(config_content);
+    free(config.items);
     return result;
 }
