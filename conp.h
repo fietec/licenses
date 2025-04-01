@@ -33,8 +33,9 @@
 #include <stdint.h>
 #include <ctype.h>
 #include <sys/stat.h>
+#include <assert.h>
 
-#define conp_is_whitespace(c) ((c == ' ' || c == '\t'))
+#define conp_is_whitespace(c) ((c == ' ' || c == '\t' || c == '\n'))
 #define conp_check_line(lexer, c) do{if (c == '\n'){(lexer)->loc.row++; (lexer)->loc.column=1;}else{lexer->loc.column++;}}while(0)
 #define conp_inc(lexer) do{lexer->index++; lexer->loc.column++;}while(0)
 #define conp_get_char(lexer) (lexer->buffer[lexer->index])
@@ -54,7 +55,6 @@
 
 typedef enum{
     ConpToken_Sep,
-    ConpToken_NewLine,
     ConpToken_End,
     ConpToken_Field,
     ConpToken_String,
@@ -68,13 +68,11 @@ typedef enum{
 const char* const ConpTokenTypeNames[] = {
     [ConpToken_Field] = "Field",
     [ConpToken_Sep] = "Sep",
-    [ConpToken_NewLine] = "NewLine",
     [ConpToken_String] = "String",
     [ConpToken_Int] = "Int",
     [ConpToken_Float] = "Float",
     [ConpToken_True] = "Bool",
     [ConpToken_False] = "Bool",
-    [ConpToken_End] = "--END--"
 };
 
 _Static_assert(ConpToken__Count == conp_arr_len(ConpTokenTypeNames), "ConpTokenType count has changed!");
@@ -141,17 +139,8 @@ bool conp_parse(ConpLexer *lexer, ConpEntry *entry)
 {
     if (lexer == NULL || entry == NULL) return false;
     ConpToken token;
-    bool loop = true;
-    while (loop){
-        conp_next(lexer, &token);
-        switch (token.type){
-            case ConpToken_NewLine: continue;
-            case ConpToken_End: return false;
-            default: {
-                loop = false;
-            }
-        }
-    }
+    conp_next(lexer, &token);
+    if (token.type == ConpToken_End) return false;
     entry->key = token;
     if (!conp_expect(lexer, &token, ConpToken_Sep)) return false;
     if (!conp_expect(lexer, &token, CONP_VALUES)) return false;
@@ -222,11 +211,6 @@ bool conp_next(ConpLexer *lexer, ConpToken *token)
     switch (conp_get_char(lexer)){
         case '=':{
             conp__set_token(token, ConpToken_Sep, start, start+1, loc);
-        } break;
-        case '\n':{
-            lexer->loc.row++;
-            lexer->loc.column = 0;
-            conp__set_token(token, ConpToken_NewLine, start, start+1, loc);
         } break;
         case '"':{
             // lex strings
@@ -345,8 +329,7 @@ void conp_print_token(ConpToken token)
 {
     switch (token.type){
         case ConpToken_End:
-        case ConpToken_Sep:
-        case ConpToken_NewLine:{
+        case ConpToken_Sep:{
             printf("%s", ConpTokenTypeNames[token.type]);
         } break;
         default:{
