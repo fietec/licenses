@@ -1,0 +1,1 @@
+gcc -o licenses licenses.c
