@@ -44,7 +44,7 @@
 #define conp_token_args_len(...) sizeof(ConpTokenType[]){__VA_ARGS__}/sizeof(ConpTokenType)
 #define conp_token_args_array(...) (ConpTokenType[]){__VA_ARGS__}, conp_token_args_len(__VA_ARGS__)
 
-#define CONP_LOC_FMT "%s:%d:%d"
+#define CONP_LOC_FMT "%s:%zu:%zu:"
 #define conp_arr_len(arr) ((arr)!= NULL ? sizeof((arr))/sizeof((arr)[0]):0)
 
 #define CONP_VALUES ConpToken_Field, ConpToken_Int, ConpToken_Float, ConpToken_String, ConpToken_True, ConpToken_False
@@ -317,10 +317,10 @@ bool conp_extract(ConpToken *token, char *buffer, size_t buffer_size)
             r++;
             w++;
         }
-        sprintf(buffer, "%.*s", w-temp_buffer+1, temp_buffer);
+        sprintf(buffer, "%.*s", (int) (w-temp_buffer+1), temp_buffer);
     }
     else{
-        sprintf(buffer, "%.*s", t_len, token->start);
+        sprintf(buffer, "%.*s", (int) t_len, token->start);
     }
     return true;
 }
@@ -333,7 +333,7 @@ void conp_print_token(ConpToken token)
             printf("%s", ConpTokenTypeNames[token.type]);
         } break;
         default:{
-            printf("%s: '%.*s'", ConpTokenTypeNames[token.type], token.len, token.start);
+            printf("%s: '%.*s'", ConpTokenTypeNames[token.type], (int) token.len, token.start);
         }
     }
 }

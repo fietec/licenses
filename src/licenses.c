@@ -4,6 +4,9 @@
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <errno.h>
+
+#include <cwalk.h>
 
 #define CONP_IMPLEMENTATION
 #include "conp.h"
@@ -13,18 +16,56 @@
 #define CONFIG_FILE_NAME "licenses.config"
 
 static char temp_buffer[FILENAME_MAX];
+static char exe_dir[FILENAME_MAX];
 
 static ConpEntries config;
 
+bool get_exe_path(char *buffer, size_t buffer_size)
+{
+#ifdef _WIN32
+    GetModuleFileNameA(NULL, buffer, buffer_size);
+#elif __APPLE__
+    if (_NSGetExecutablePath(buffer, &buffer_size) != 0) return false;
+#elif __linux__
+    ssize_t len = readlink("/proc/self/exe", buffer, buffer_size-1);
+    if (len == -1) return false;
+    buffer[len] = '\0';
+#else
+    fprintf(stderr, "[ERROR] %s:%d:%s: Unsupported platform!\n", __LINE__, __FILE__, __func__);
+    return false;
+#endif 
+    cwk_path_normalize(buffer, buffer, buffer_size);
+    return true;
+}
+
+bool get_parent_dir(const char *path, char *buffer, size_t buffer_size)
+{
+    size_t parent_len;
+    cwk_path_get_dirname(path, &parent_len);
+    if (parent_len == 0 || parent_len >= buffer_size) return false;
+    memmove(buffer, path, parent_len);
+    buffer[parent_len] = '\0';
+    cwk_path_normalize(buffer, buffer, buffer_size);
+    return true;
+}
+
+void get_exe_dir(void)
+{
+    get_exe_path(exe_dir, sizeof(exe_dir));
+    (void) get_parent_dir(exe_dir, exe_dir, sizeof(exe_dir));
+}
+
 char *get_config_file_path()
 {
-    snprintf(temp_buffer, FILENAME_MAX, "%s/licenses/"CONFIG_FILE_NAME, getenv("APPDATA"));
+    get_exe_dir();
+    cwk_path_join(exe_dir, "licenses/"CONFIG_FILE_NAME, temp_buffer, sizeof(temp_buffer));
     return temp_buffer;
 }
 
 char *get_config_path()
 {
-    snprintf(temp_buffer, FILENAME_MAX, "%s/licenses", getenv("APPDATA"));
+    get_exe_dir();
+    cwk_path_join(exe_dir, "licenses", temp_buffer, sizeof(temp_buffer));
     return temp_buffer;
 }
 
@@ -44,7 +85,7 @@ bool isfile(const char *path)
 
 bool create_dir(const char *path)
 {
-    if (mkdir(path) == -1){
+    if (mkdir(path, 0777) == -1){
         fprintf(stderr, "Could not create directory '%s': %s!\n", path, strerror(errno));
         return false;
     }
@@ -62,7 +103,7 @@ void print_usage(char *program_name)
     printf("  Currently these licenses are available:\n");
     for (size_t i=0; i<config.count; ++i){
         ConpToken key = config.items[i].key;
-        printf("    - %.*s\n", key.len, key.start);
+        printf("    - %.*s\n", (int)key.len, key.start);
     }
 }
 
@@ -129,7 +170,7 @@ int write_license(char *filepath)
     size_t len = strlen(content);
     size_t n = fwrite(content, sizeof(char), len, file);
     if (n < len){
-        fprintf(stderr, "[ERROR] Could only write %d of %d bytes to %s!\n", n, len, "LICENSE");
+        fprintf(stderr, "[ERROR] Could only write %zu of %zu bytes to %s!\n", n, len, "LICENSE");
         return_defer(1);
     }
     printf("Successfully create LICENSE!\n");
@@ -182,6 +223,7 @@ int main(int argc, char **argv)
             return_defer(1);
         }
         if (!conp_extract(&token, temp_buffer, FILENAME_MAX)) return_defer(1);
+	cwk_path_normalize(temp_buffer, temp_buffer, sizeof(temp_buffer));
         return write_license(temp_buffer);
     }
     else{
